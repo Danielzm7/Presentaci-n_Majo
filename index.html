@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#121B1C">
 <title>Riesgos Biomecánicos en la Cocina</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -165,6 +168,10 @@ p{margin:0;font-size:27px;line-height:1.42}
 #notes{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);width:min(860px, calc(100% - 32px));background:rgba(18,27,28,.94);color:#E9EFEC;
   border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:16px 20px;font:400 17px/1.5 var(--body);z-index:22}
 #notes strong{color:var(--saffron);display:block;font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px}
+@media (hover:none){#hud{opacity:.9}#hud button{height:44px;min-width:44px}#hint{display:none}}
+body.immersive #hud{background:none;justify-content:flex-end;opacity:.5}
+body.immersive #b-notes,body.immersive #count,body.immersive #b-prev,body.immersive #b-next{display:none}
+#toast{position:fixed;left:50%;top:16px;transform:translateX(-50%);max-width:min(560px,calc(100% - 32px));background:rgba(18,27,28,.95);color:#E9EFEC;border:1px solid rgba(255,255,255,.2);border-radius:14px;padding:12px 16px;font:500 15px/1.4 var(--body);z-index:30;text-align:center}
 #hint{position:fixed;top:14px;right:max(16px, env(safe-area-inset-right, 0px));color:#E9EFEC;font:500 13px var(--body);opacity:.7;z-index:20;transition:opacity 1s}
 
 @media (prefers-reduced-motion: reduce){
@@ -716,6 +723,7 @@ p{margin:0;font-size:27px;line-height:1.42}
 
 </div></div>
 
+<div id="toast" hidden role="status"></div>
 <div id="notes" hidden><strong>Notas para la exposición</strong><span id="notes-text"></span></div>
 <nav id="hud" aria-label="Controles de la presentación">
   <div class="grp"><button id="b-notes" type="button" aria-pressed="false">Notas</button><button id="b-full" type="button">Pantalla completa</button></div>
@@ -805,7 +813,7 @@ p{margin:0;font-size:27px;line-height:1.42}
   var slides=[].slice.call(document.querySelectorAll('.slide'));
   var cur=0, step=0;
   var stage=document.getElementById('stage');
-  function fit(){var s=Math.min(window.innerWidth/1600,window.innerHeight/900);stage.style.transform='scale('+s+')';}
+  function fit(){var vv=window.visualViewport,w=vv?vv.width:window.innerWidth,h=vv?vv.height:window.innerHeight;var s=Math.min(w/1600,h/900);stage.style.transform='scale('+s+')';}
   window.addEventListener('resize',fit);fit();
   function maxStep(i){var m=0;slides[i].querySelectorAll('[data-step]').forEach(function(e){m=Math.max(m,+e.dataset.step)});return m;}
   function applySteps(){
@@ -849,7 +857,38 @@ p{margin:0;font-size:27px;line-height:1.42}
   document.getElementById('b-prev').onclick=function(e){e.stopPropagation();prev()};
   function toggleNotes(){var n=document.getElementById('notes');n.hidden=!n.hidden;document.getElementById('b-notes').setAttribute('aria-pressed',String(!n.hidden));}
   document.getElementById('b-notes').onclick=function(e){e.stopPropagation();toggleNotes()};
-  function full(){try{ if(!document.fullscreenElement) document.documentElement.requestFullscreen().catch(function(){}); else document.exitFullscreen(); }catch(e){} }
+  var toastT;
+  function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(function(){t.hidden=true},6000);}
+  function fsEl(){return document.fullscreenElement||document.webkitFullscreenElement;}
+  function setFullLabel(){var on=!!fsEl()||document.body.classList.contains('immersive');document.getElementById('b-full').textContent=on?'Salir de pantalla completa':'Pantalla completa';fit();}
+  function immersive(){
+    var on=document.body.classList.toggle('immersive');
+    setFullLabel();
+    if(on){
+      var ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+      toast(ios?'En iPhone/iPad el navegador no permite pantalla completa real. Para verla sin barras: Compartir → Añadir a pantalla de inicio.':'Modo pantalla completa. Pulsa el botón de nuevo para salir.');
+    }
+  }
+  function lockLandscape(){try{ if(screen.orientation&&screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); }catch(e){}}
+  function full(){
+    if(document.body.classList.contains('immersive')){immersive();return;}
+    if(fsEl()){ var ex=document.exitFullscreen||document.webkitExitFullscreen; try{ var r0=ex.call(document); if(r0&&r0.catch) r0.catch(function(){}); }catch(e){} return; }
+    var el=document.documentElement, rq=el.requestFullscreen||el.webkitRequestFullscreen;
+    if(!rq){immersive();return;}
+    try{
+      var r=rq.call(el);
+      if(r&&r.then){ r.then(lockLandscape).catch(immersive); } else { lockLandscape(); }
+    }catch(e){immersive();}
+  }
+  document.addEventListener('fullscreenchange',setFullLabel);
+  document.addEventListener('webkitfullscreenchange',setFullLabel);
+  /* aviso en móvil vertical */
+  (function(){
+    var portrait=window.matchMedia&&window.matchMedia('(orientation: portrait)').matches&&window.innerWidth<700;
+    if(portrait) toast('Gira el teléfono en horizontal para ver la presentación más grande.');
+  })();
+  if(window.visualViewport) window.visualViewport.addEventListener('resize',fit);
+  window.addEventListener('orientationchange',function(){setTimeout(fit,250)});
   document.getElementById('b-full').onclick=function(e){e.stopPropagation();full()};
   setTimeout(function(){document.getElementById('hint').style.opacity=0},5000);
   var start=parseInt((location.hash||'').replace('#s',''),10);
